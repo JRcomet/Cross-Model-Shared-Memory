@@ -60,25 +60,67 @@ else
     echo "✓ Created CLAUDE.md with session memory instructions"
 fi
 
-# 4. Setup auto-save cron (optional)
+# 4. Setup real-time watcher
 echo ""
-read -p "Set up auto-save every 2 hours via cron? (y/N) " SETUP_CRON
-if [ "$SETUP_CRON" = "y" ] || [ "$SETUP_CRON" = "Y" ]; then
-    CRON_CMD="0 */2 * * * python3 $SKILL_DIR/scripts/auto_save.py >> /tmp/session-memory-auto-save.log 2>&1"
-    (crontab -l 2>/dev/null | grep -v "auto_save.py"; echo "$CRON_CMD") | crontab -
-    echo "✓ Cron job installed (runs every 2 hours)"
+read -p "Start real-time memory watcher as background daemon? (Y/n) " START_WATCHER
+if [ "$START_WATCHER" != "n" ] && [ "$START_WATCHER" != "N" ]; then
+    # Kill existing watcher if running
+    pkill -f "watch_save.py" 2>/dev/null || true
+    # Start watcher daemon
+    nohup python3 "$SKILL_DIR/scripts/watch_save.py" >> ~/.claude/session-memory-watcher.log 2>&1 &
+    WATCHER_PID=$!
+    echo "✓ Real-time watcher started (PID: $WATCHER_PID)"
+    echo "  Checks every 30s, saves when changes detected"
+    echo "  Log: ~/.claude/session-memory-watcher.log"
+
+    # Add to LaunchAgent for auto-start on login (macOS)
+    if [ "$(uname)" = "Darwin" ]; then
+        PLIST_DIR="$HOME/Library/LaunchAgents"
+        PLIST_FILE="$PLIST_DIR/com.session-memory.watcher.plist"
+        mkdir -p "$PLIST_DIR"
+        cat > "$PLIST_FILE" << PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.session-memory.watcher</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>$SKILL_DIR/scripts/watch_save.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>$HOME/.claude/session-memory-watcher.log</string>
+    <key>StandardErrorPath</key>
+    <string>$HOME/.claude/session-memory-watcher.log</string>
+</dict>
+</plist>
+PLIST
+        launchctl load "$PLIST_FILE" 2>/dev/null || true
+        echo "✓ LaunchAgent installed (auto-starts on login)"
+    fi
 else
-    echo "Skipped cron setup. You can run auto_save.py manually anytime."
+    echo "Skipped watcher setup. You can start it manually:"
+    echo "  nohup python3 $SKILL_DIR/scripts/watch_save.py &"
 fi
+
+# Remove old cron job if exists
+crontab -l 2>/dev/null | grep -v "auto_save.py" | crontab - 2>/dev/null || true
 
 echo ""
 echo "=== Setup Complete ==="
 echo ""
 echo "How it works:"
-echo "  • New conversations will auto-load previous session context"
-echo "  • Session memories are saved to .claude/projects/<project>/memory/"
-echo "  • Run 'python3 $SKILL_DIR/scripts/auto_save.py' to save all sessions now"
+echo "  • Real-time watcher monitors all sessions every 30s"
+echo "  • Changes are saved automatically to .claude/projects/<project>/memory/"
+echo "  • New Cowork conversations auto-load previous session context"
+echo "  • Watcher auto-starts on login (macOS LaunchAgent)"
 echo ""
 echo "Commands you can use in chat:"
-echo "  • '记住这次对话' / 'save memory'  — Save current session"
 echo "  • '同步一下' / 'sync sessions'    — Load other sessions' context"
+echo "  • '记住这次对话' / 'save memory'  — Force save current session"
