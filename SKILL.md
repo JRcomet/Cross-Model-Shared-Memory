@@ -1,11 +1,11 @@
 ---
-name: session-memory
-description: "Cross-session memory and context sharing for Claude conversations. Automatically saves conversation summaries and enables different model sessions (Sonnet, Opus, Haiku) to see each other's chat history. Use this skill whenever the user mentions 'memory', 'remember', 'what did we talk about', 'sync sessions', 'share context', 'cross-session', wants to recall previous conversations, or asks one model about what happened in another model's session. Also triggers when the user says things like 'check my history', 'what did Sonnet/Opus do', 'continue from last time', or 'save this conversation'. MANDATORY: use this skill any time the user references past sessions or wants context preserved across conversations."
+name: cross-model-shared-memory
+description: "Cross-Model Shared Memory — Real-time memory sharing between Claude Sonnet, Opus, and Haiku. Auto-saves conversation summaries and syncs across sessions so each model can see what the others discussed. Triggers: 'sync', 'memory', 'refresh memory', 'check other sessions', 'load memory', 'what did Sonnet/Opus do', 'what did we talk about', 'continue from last time', 'save conversation', '同步', '记忆', '刷新记忆', '看看其他对话', '更新记忆'. MANDATORY: use for any cross-session memory or model sync request."
 ---
 
-# Session Memory — Cross-Session Context Sharing
+# Cross-Model Shared Memory
 
-This skill gives Claude persistent memory across conversations. It solves the core problem: when you talk to Sonnet in one session and Opus in another, neither knows what the other discussed. This skill bridges that gap.
+Real-time memory sharing between Claude Sonnet, Opus, and Haiku. Solves the core problem: when you talk to Sonnet in one session and Opus in another, neither knows what the other discussed. This skill bridges that gap.
 
 ## How It Works
 

@@ -1,6 +1,6 @@
-# session-memory
+# Cross-Model Shared Memory
 
-A Claude skill that gives Claude **persistent memory across conversations**. When you talk to Sonnet in one session and Opus in another, neither knows what the other discussed — this skill bridges that gap.
+A Claude skill that enables **real-time memory sharing between Sonnet, Opus, and Haiku**. When you talk to Sonnet in one session and Opus in another, neither knows what the other discussed — this skill bridges that gap.
 
 ## Features
 
