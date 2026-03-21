@@ -94,17 +94,22 @@ def parse_transcript(jsonl_path: str, max_bytes: int = 10 * 1024 * 1024) -> list
 
 
 def detect_model(messages: list[dict]) -> str:
-    """Detect which model was used in this session."""
+    """Detect which model was used in this session.
+
+    Uses the LATEST model field, because a session may start with one model
+    (e.g. Sonnet) and continue with another (e.g. Opus) after context compaction.
+    """
+    last_model = "unknown"
     for msg in messages:
         model = msg.get("model", "")
         if model:
             if "opus" in model:
-                return "opus"
+                last_model = "opus"
             elif "sonnet" in model:
-                return "sonnet"
+                last_model = "sonnet"
             elif "haiku" in model:
-                return "haiku"
-    return "unknown"
+                last_model = "haiku"
+    return last_model
 
 
 def extract_topics(messages: list[dict]) -> list[str]:
