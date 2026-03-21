@@ -161,17 +161,67 @@ def save_memory(transcript: Path, memory_dir: Path):
         log(f"  Error: {e}")
 
 
+def write_shared_summary(all_memory_dirs: list[Path]):
+    """Write a consolidated summary to ~/Downloads/.session-memory.md
+    so Cowork sessions (which mount ~/Downloads) can read it."""
+    shared_path = Path.home() / "Downloads" / ".session-memory.md"
+
+    all_memories = []
+    for memory_dir in all_memory_dirs:
+        if not memory_dir.exists():
+            continue
+        for md_file in sorted(memory_dir.glob("session_*.md"), reverse=True):
+            try:
+                content = md_file.read_text(encoding="utf-8")
+                stat = md_file.stat()
+                all_memories.append((stat.st_mtime, md_file.name, content))
+            except Exception:
+                continue
+
+    if not all_memories:
+        return
+
+    # Sort by time, take latest 10
+    all_memories.sort(key=lambda x: x[0], reverse=True)
+    latest = all_memories[:10]
+
+    lines = [
+        "# Session Memory — Cross-Session Context",
+        f"_Auto-updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_",
+        f"_Total sessions saved: {len(all_memories)}, showing latest {len(latest)}_",
+        "",
+        "---",
+        "",
+    ]
+
+    for _, name, content in latest:
+        lines.append(content)
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    try:
+        with open(shared_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+        log(f"Shared summary updated: {shared_path} ({len(latest)} sessions)")
+    except Exception as e:
+        log(f"Error writing shared summary: {e}")
+
+
 def watch_loop():
     """Main watch loop — check for changes every CHECK_INTERVAL seconds."""
     log(f"Session Memory Watcher started (interval: {CHECK_INTERVAL}s)")
     log(f"Log file: {LOG_FILE}")
 
     while running:
+        any_saved = False
         try:
             project_dirs = find_claude_dirs()
+            memory_dirs = []
 
             for project_dir in project_dirs:
                 memory_dir = project_dir / "memory"
+                memory_dirs.append(memory_dir)
                 transcripts = list(project_dir.glob("*.jsonl"))
 
                 for transcript in transcripts:
@@ -200,6 +250,11 @@ def watch_loop():
                         "fingerprint": fp,
                         "last_saved_at": now,
                     }
+                    any_saved = True
+
+            # Update shared summary in ~/Downloads if anything changed
+            if any_saved:
+                write_shared_summary(memory_dirs)
 
         except Exception as e:
             log(f"Watch loop error: {e}")
