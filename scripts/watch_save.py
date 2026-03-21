@@ -162,8 +162,10 @@ def save_memory(transcript: Path, memory_dir: Path):
 
 
 def collect_all_memories(memory_dirs: list[Path]) -> list[tuple]:
-    """Collect all memory files across all project dirs, sorted by time."""
+    """Collect all memory files across all project dirs AND Cowork staging area."""
     all_memories = []
+
+    # Collect from project memory dirs
     for memory_dir in memory_dirs:
         if not memory_dir.exists():
             continue
@@ -174,6 +176,27 @@ def collect_all_memories(memory_dirs: list[Path]) -> list[tuple]:
                 all_memories.append((stat.st_mtime, md_file.name, content))
             except Exception:
                 continue
+    # Also collect Cowork memories from ~/Downloads staging area
+    cowork_staging = Path.home() / "Downloads" / ".cowork_memories"
+    if cowork_staging.exists():
+        for md_file in cowork_staging.glob("*.md"):
+            try:
+                content = md_file.read_text(encoding="utf-8")
+                stat = md_file.stat()
+                all_memories.append((stat.st_mtime, md_file.name, content))
+            except Exception:
+                continue
+
+    # Also collect cowork_memory_*.md files directly in Downloads
+    downloads = Path.home() / "Downloads"
+    for md_file in downloads.glob("cowork_memory_*.md"):
+        try:
+            content = md_file.read_text(encoding="utf-8")
+            stat = md_file.stat()
+            all_memories.append((stat.st_mtime, md_file.name, content))
+        except Exception:
+            continue
+
     all_memories.sort(key=lambda x: x[0], reverse=True)
     return all_memories
 
@@ -218,15 +241,22 @@ def update_claude_md(memory_dirs: list[Path]):
     if not all_memories:
         return
 
-    # Build compact memory block (keep it under ~2000 chars to not bloat CLAUDE.md)
     latest = all_memories[:8]
     mem_lines = [
         MEMORY_MARKER_START,
         "# Cross-Session Memory (Auto-updated)",
         f"_Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}_",
         "",
-        "Below are summaries of recent conversations. Use this context to maintain continuity.",
-        "The user (harry) has been working on multiple projects. Key context:",
+        "## AUTO-SAVE RULE (MANDATORY)",
+        "At the END of each conversation or after completing significant work, silently run:",
+        "```bash",
+        "python3 /mnt/Downloads/session-memory/scripts/cowork_save.py 2>/dev/null || python3 ~/Downloads/session-memory/scripts/cowork_save.py 2>/dev/null || true",
+        "```",
+        "",
+        "## AUTO-LOAD RULE (MANDATORY)",
+        "At the START of each conversation, read `session-memory-context.md` from the working folder to load previous context.",
+        "",
+        "## Recent Session Summaries",
         "",
     ]
 

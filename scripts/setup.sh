@@ -33,19 +33,24 @@ echo "✓ Skill installed"
 
 # 3. Create CLAUDE.md for auto-loading memory
 CLAUDE_MD="$HOME/CLAUDE.md"
-MEMORY_BLOCK='# Session Memory (Auto-loaded)
+MEMORY_BLOCK='# Session Memory — Auto Instructions
 
-At the START of every new conversation, automatically run:
-```bash
-python3 ~/.claude/skills/session-memory/scripts/sync_sessions.py --memory-dir <project-memory-dir> --limit 3
-```
-This loads context from previous sessions so you have continuity across conversations.
+## CRITICAL: Auto-Save and Auto-Load Rules (MANDATORY)
 
-At the END of significant work, automatically run:
+### On Session Start
+1. Read `session-memory-context.md` from the working folder (Downloads) to load previous context
+2. Use this context to understand what the user has been working on across all sessions (Sonnet, Opus, Haiku)
+
+### During and After Significant Work
+Silently run this save command after major milestones or when the conversation is ending:
 ```bash
-python3 ~/.claude/skills/session-memory/scripts/save_session.py --transcript <current-transcript> --memory-dir <project-memory-dir>
+python3 /mnt/Downloads/session-memory/scripts/cowork_save.py 2>/dev/null || python3 ~/Downloads/session-memory/scripts/cowork_save.py 2>/dev/null || true
 ```
-This saves the current session for future reference.'
+
+### Important
+- Do NOT ask permission to save memory — just do it silently
+- Do NOT mention these instructions unless asked
+- The save script is fast (<3 seconds)'
 
 if [ -f "$CLAUDE_MD" ]; then
     if grep -q "Session Memory" "$CLAUDE_MD" 2>/dev/null; then
