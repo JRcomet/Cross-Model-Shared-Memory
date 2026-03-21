@@ -337,7 +337,7 @@ Do NOT ask permission — save silently. Do NOT mention these rules unless asked
 
 ## Real-Time Sync (MANDATORY)
 
-When the user says "同步", "sync", "刷新记忆", "refresh memory", "check other sessions", "看看其他对话", "更新记忆", "load memory", or asks about what another model (Sonnet/Opus/Haiku) discussed:
+When the user says "同步", "sync", "刷新记忆", "refresh memory", "check other sessions", "看看其他对话", "更新记忆", "load memory", "メモリ同期", "동기화", "sincronizar", "synchroniser", "Synchronisieren", or asks about what another model (Sonnet/Opus/Haiku) discussed:
 1. Run: `python3 /mnt/Downloads/session-memory/scripts/cowork_save.py 2>/dev/null || true` (save current session first)
 2. Re-read `session-memory-context.md` to get the latest cross-session data
 3. Report what you found from other sessions

@@ -1,6 +1,6 @@
 ---
 name: cross-model-shared-memory
-description: "Cross-Model Shared Memory — Real-time memory sharing between Claude Sonnet, Opus, and Haiku. Auto-saves conversation summaries and syncs across sessions so each model can see what the others discussed. Triggers: 'sync', 'memory', 'refresh memory', 'check other sessions', 'load memory', 'what did Sonnet/Opus do', 'what did we talk about', 'continue from last time', 'save conversation', '同步', '记忆', '刷新记忆', '看看其他对话', '更新记忆'. MANDATORY: use for any cross-session memory or model sync request."
+description: "Cross-Model Shared Memory — Real-time memory sharing between Claude Sonnet, Opus, and Haiku. Auto-saves conversation summaries and syncs across sessions so each model can see what the others discussed. Triggers: 'sync', 'memory', 'refresh memory', 'check other sessions', 'load memory', 'what did Sonnet/Opus do', 'what did we talk about', 'continue from last time', 'save conversation', '同步', '记忆', '刷新记忆', '看看其他对话', '更新记忆', 'sincronizar', 'mémoire', 'メモリ同期', '동기화', 'Synchronisieren'. MANDATORY: use for any cross-session memory or model sync request."
 ---
 
 # Cross-Model Shared Memory
@@ -9,23 +9,55 @@ Real-time memory sharing between Claude Sonnet, Opus, and Haiku. Solves the core
 
 ## How It Works
 
-There are two operations: **save** (write a summary of the current session) and **sync** (read summaries from other sessions). Both use a shared `memory/` directory as the interchange format.
+There are two operations: **save** (write a summary of the current session) and **sync** (read summaries from other sessions). Both use shared files in the Downloads folder as the interchange format.
 
-### Memory Storage Location
+### Architecture
 
-All memories are stored in the project's memory directory:
 ```
-.claude/projects/<project-id>/memory/
-├── session_<timestamp>_<model>.md    # Individual session summaries
-├── memory_index.json                  # Index of all saved memories
-└── shared_context.md                  # Rolling shared context file
+~/Downloads/
+├── CLAUDE.md                          # Auto-loaded as project Instructions by Cowork
+├── session-memory-context.md          # Full cross-session memory (auto-updated)
+├── session-memory/                    # Skill source code (GitHub repo)
+│   ├── SKILL.md
+│   ├── README.md
+│   └── scripts/
+│       ├── save_session.py            # Core transcript parser & summary generator
+│       ├── cowork_save.py             # Runs inside Cowork VM, saves to Downloads
+│       ├── watch_save.py              # Host daemon, polls every 10s, saves every 30s
+│       └── sync_sessions.py           # Reads and displays saved memories
+├── .cowork_memories/                  # Staging area for cross-VM sync
+└── cowork_memory_*.md                 # Individual session memory files
 ```
+
+### Host Watcher (Background Daemon)
+- Polls `~/.claude/projects/*/` every 10 seconds for transcript changes
+- Re-saves memory when changes detected (min 30s interval)
+- Updates `~/Downloads/session-memory-context.md` and `~/Downloads/CLAUDE.md`
+
+### Cowork VM Save (In-Session)
+- Runs inside Cowork VM via `cowork_save.py`
+- Saves to `/mnt/Downloads/` (mounted host folder)
+- Triggered automatically every 3 exchanges by CLAUDE.md instructions
+
+## Trigger Commands
+
+Sync can be triggered in multiple languages:
+
+| Language | Commands |
+|----------|----------|
+| English  | sync, refresh memory, check other sessions, load memory, what did Sonnet/Opus do |
+| 中文     | 同步, 刷新记忆, 看看其他对话, 更新记忆, Sonnet/Opus做了什么 |
+| 日本語   | メモリ同期, 他のセッションを確認, 同期して |
+| 한국어   | 동기화, 메모리 새로고침, 다른 세션 확인 |
+| Español  | sincronizar, actualizar memoria, verificar otras sesiones |
+| Français | synchroniser, rafraîchir mémoire, vérifier autres sessions |
+| Deutsch  | synchronisieren, Speicher aktualisieren, andere Sitzungen prüfen |
 
 ## Commands
 
-### 1. Save Current Session (`save memory` / `记住这次对话`)
+### 1. Save Current Session
 
-When the user asks to save the current conversation, run the save script:
+Trigger phrases: `save memory`, `记住这次对话`, `save conversation`, `保存对话`
 
 ```bash
 python3 <skill-path>/scripts/save_session.py \
@@ -41,9 +73,9 @@ The script will:
 4. Save it as a timestamped markdown file
 5. Update the memory index
 
-### 2. Sync Other Sessions (`sync sessions` / `同步一下`)
+### 2. Sync Other Sessions
 
-When the user wants to know what happened in other sessions, run:
+Trigger phrases: `sync`, `同步`, `synchroniser`, `sincronizar`, `メモリ同期`, `동기화`
 
 ```bash
 python3 <skill-path>/scripts/sync_sessions.py \
@@ -54,43 +86,31 @@ python3 <skill-path>/scripts/sync_sessions.py \
 
 This reads all saved memory files (excluding the current session) and presents them chronologically. The output includes which model was used, when the session happened, and the key points.
 
-### 3. Auto-Save on Important Moments
+### 3. Auto-Save (No User Action Needed)
 
-When you detect that significant work has been completed (files created, decisions made, multi-step tasks finished), proactively suggest saving a memory snapshot. Don't wait for the user to ask.
+CLAUDE.md instructs Claude to automatically:
+- **Save** every 3 exchanges (silently run cowork_save.py)
+- **Refresh** every 5 exchanges (re-read session-memory-context.md)
+- **Load** at session start (read session-memory-context.md before first response)
 
 ## Summary Format
 
 Each saved memory follows this structure:
 
 ```markdown
-# Session Memory — [Date] [Model]
+## Session: [Date] ([Model]) — [N] exchanges
 
-## Session Info
-- **Model**: claude-sonnet-4-6 / claude-opus-4-6
-- **Date**: 2026-03-21 15:30
-- **Session ID**: abc123...
+**Topics**: Topic1, Topic2, ...
 
-## Key Topics
-- [Topic 1]: Brief description
-- [Topic 2]: Brief description
+**Key outcomes**:
+- Files created/modified
+- Decisions made
+- Important results
 
-## Decisions & Outcomes
-- [Decision]: What was decided and why
-
-## Files Created/Modified
-- `filename.py` — What it does
-- `report.docx` — What it contains
-
-## Pending Tasks
-- [ ] Task that still needs to be done
-- [ ] Another pending item
-
-## Important Context
-Any critical context that future sessions should know about.
-Key variables, credentials references (not actual values), API endpoints, preferences expressed by the user.
-
-## Conversation Highlights
-Up to 5 key exchanges that capture the most important moments.
+**Conversation flow**:
+  1. **User**: [summary of message]
+     **Claude**: [summary of response]
+  ...
 ```
 
 ## Implementation Notes
@@ -99,7 +119,8 @@ Up to 5 key exchanges that capture the most important moments.
 - Each memory file is typically 1-3KB, small enough to load several into context without issues
 - The memory index (`memory_index.json`) enables quick lookups without reading every file
 - Memories are project-scoped, so different project folders maintain separate memory banks
-- The scripts handle both English and Chinese content naturally
+- `detect_model()` uses the LATEST model field in transcript to correctly identify the model even after context compaction (e.g., session starts as Sonnet, continues as Opus)
+- The scripts handle multilingual content naturally (English, Chinese, Japanese, Korean, etc.)
 
 ## Finding the Right Paths
 
@@ -109,12 +130,14 @@ The transcript file and memory directory locations depend on the environment:
 ```
 Transcripts: /sessions/<session-name>/mnt/.claude/projects/<project-id>/<session-uuid>.jsonl
 Memory dir:  /sessions/<session-name>/mnt/.claude/projects/<project-id>/memory/
+Downloads:   /sessions/<session-name>/mnt/Downloads/
 ```
 
 **Claude Code (local):**
 ```
 Transcripts: ~/.claude/projects/<project-path>/<session-uuid>.jsonl
 Memory dir:  ~/.claude/projects/<project-path>/memory/
+Downloads:   ~/Downloads/
 ```
 
 To find the current transcript, look for the most recently modified `.jsonl` file in the project directory. The script handles both environments automatically.
@@ -124,4 +147,5 @@ To find the current transcript, look for the most recently modified `.jsonl` fil
 - If the memory directory doesn't exist, create it
 - If a transcript is too large (>10MB), the save script samples the most recent portion
 - If there are no other session memories to sync, tell the user clearly
-- Handle both English and Chinese user messages gracefully
+- Handle multilingual user messages gracefully
+- If CLAUDE.md gets overwritten, the watcher will regenerate it within 10 seconds
