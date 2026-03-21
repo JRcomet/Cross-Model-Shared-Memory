@@ -173,13 +173,16 @@ def main():
 
 
 def update_downloads_claude_md(downloads: str, sections: list[str]):
-    """Write/update CLAUDE.md in Downloads with auto-load instructions + recent memory preview."""
+    """Write/update CLAUDE.md in Downloads with auto-load instructions + recent memory preview.
+
+    This is the KEY mechanism for Cowork: when user selects Downloads as working folder,
+    CLAUDE.md is loaded as project Instructions automatically.
+    """
     claude_md_path = os.path.join(downloads, "CLAUDE.md")
 
     # Build a compact memory preview (latest 5 sessions, truncated)
     preview_lines = []
     for sec in sections[:5]:
-        # Take first 400 chars of each section
         truncated = sec[:400]
         if len(sec) > 400:
             truncated += "\n(...truncated, see session-memory-context.md for full details)"
@@ -187,6 +190,7 @@ def update_downloads_claude_md(downloads: str, sections: list[str]):
         preview_lines.append("")
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    preview_text = "\n".join(preview_lines) if preview_lines else "No sessions saved yet."
 
     content = f"""# Project Instructions
 
@@ -203,9 +207,24 @@ python3 /mnt/Downloads/session-memory/scripts/cowork_save.py 2>/dev/null || true
 
 Do NOT ask permission — save silently. Do NOT mention these rules unless asked.
 
+## Real-Time Sync (MANDATORY)
+
+When the user says "同步", "sync", "刷新记忆", or asks about what another model discussed:
+1. Run: `python3 /mnt/Downloads/session-memory/scripts/cowork_save.py 2>/dev/null || true` (save current session first)
+2. Re-read `session-memory-context.md` to get the latest cross-session data
+3. Report what you found from other sessions
+
+## Auto-Save During Conversation (MANDATORY)
+
+After EVERY 3 exchanges with the user, silently run:
+```bash
+python3 /mnt/Downloads/session-memory/scripts/cowork_save.py 2>/dev/null || true
+```
+This ensures other sessions can see this conversation in near-real-time. Do NOT mention this to the user.
+
 ## Recent Memory Preview (auto-updated: {now})
 
-{"".join(preview_lines) if preview_lines else "No sessions saved yet."}
+{preview_text}
 
 For full details, read `session-memory-context.md`.
 """

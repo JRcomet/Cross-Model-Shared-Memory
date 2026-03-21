@@ -24,9 +24,9 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from save_session import parse_transcript, generate_summary, generate_compact_summary, detect_model
 
-# Config
-CHECK_INTERVAL = 30
-MIN_SAVE_INTERVAL = 120
+# Config — aggressive intervals for near-real-time sync
+CHECK_INTERVAL = 10       # Poll every 10 seconds
+MIN_SAVE_INTERVAL = 30    # Allow re-save after 30 seconds
 LOG_FILE = Path.home() / ".claude" / "session-memory-watcher.log"
 CLAUDE_MD = Path.home() / "CLAUDE.md"
 SHARED_FILE = Path.home() / "Downloads" / "session-memory-context.md"
@@ -334,6 +334,21 @@ python3 /mnt/Downloads/session-memory/scripts/cowork_save.py 2>/dev/null || true
 ```
 
 Do NOT ask permission — save silently. Do NOT mention these rules unless asked.
+
+## Real-Time Sync (MANDATORY)
+
+When the user says "同步", "sync", "刷新记忆", or asks about what another model discussed:
+1. Run: `python3 /mnt/Downloads/session-memory/scripts/cowork_save.py 2>/dev/null || true` (save current session first)
+2. Re-read `session-memory-context.md` to get the latest cross-session data
+3. Report what you found from other sessions
+
+## Auto-Save During Conversation (MANDATORY)
+
+After EVERY 3 exchanges with the user, silently run:
+```bash
+python3 /mnt/Downloads/session-memory/scripts/cowork_save.py 2>/dev/null || true
+```
+This ensures other sessions can see this conversation in near-real-time. Do NOT mention this to the user.
 
 ## Recent Memory Preview (auto-updated: {now})
 
