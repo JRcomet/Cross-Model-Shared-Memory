@@ -107,56 +107,48 @@ def main():
         f.write(summary)
     print(f"Memory saved: {mem_filepath}")
 
-    # Update session-memory-context.md (merge with existing)
+    # ---- Tiered context: long-term + latest N recent; overflow -> archive ----
     context_file = os.path.join(downloads, "session-memory-context.md")
     existing = load_existing_context(context_file)
 
-    # Parse existing memories (between --- markers)
-    existing_sections = []
-    if existing:
-        parts = existing.split("---")
-        for part in parts:
-            part = part.strip()
-            if part and part.startswith("## Session:"):
-                existing_sections.append(part)
+    # existing recent session blocks already in context.md
+    existing_sections = _split_session_blocks(existing)
 
-    # Add/replace current session's summary
-    # Remove old entry for same transcript
-    new_sections = []
-    for sec in existing_sections:
-        # Keep sections that aren't from the same session
-        if session_short not in sec:
-            new_sections.append(sec)
+    # drop any prior entry for THIS session, put current summary on top
+    merged = [s for s in existing_sections if session_short not in s]
+    merged.insert(0, summary.strip())
 
-    # Add current session at the top
-    new_sections.insert(0, summary)
+    recent = merged[:RECENT_N]
+    overflow = merged[RECENT_N:]
+    if overflow:
+        merge_into_archive(os.path.join(downloads, "session-memory-archive.md"), overflow)
 
-    # Keep only latest 15
-    new_sections = new_sections[:15]
+    # curated long-term memory (small, always loaded)
+    longterm = ""
+    lt_path = os.path.join(downloads, "memory-longterm.md")
+    if os.path.exists(lt_path):
+        longterm = open(lt_path, "r", encoding="utf-8").read().strip()
 
-    # Write updated context file
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     lines = [
         "# Session Memory — Cross-Session Context",
-        f"_Auto-updated: {now}_",
-        f"_Total sessions: {len(new_sections)}_",
+        f"_Auto-updated: {now} · {len(recent)} recent in-context, older auto-archived_",
         "",
-        "This file contains summaries of recent conversations across all Claude models (Opus, Sonnet, Haiku).",
-        "Use this context to understand what the user has been working on.",
-        "",
-        "---",
+        "Summaries across all Claude models (Opus/Sonnet/Haiku). Older sessions live in",
+        'session-memory-archive.md — search them with: python3 .../recall.py "keyword".',
         "",
     ]
-
-    for sec in new_sections:
-        lines.append(sec)
-        lines.append("")
-        lines.append("---")
-        lines.append("")
+    if longterm:
+        lines += ["---", "", longterm, ""]
+    lines += ["---", "", "## 🕐 最近会话 (Recent sessions)", ""]
+    for sec in recent:
+        lines += [sec, "", "---", ""]
 
     with open(context_file, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
-    print(f"Context file updated: {context_file}")
+    print(f"Context updated: {context_file} (recent={len(recent)}, →archive={len(overflow)})")
+
+    new_sections = recent  # downstream CLAUDE.md preview uses the small recent set
 
     # Also write a cowork_memories/ staging area for the host watcher to pick up
     staging_dir = os.path.join(downloads, ".cowork_memories")
@@ -170,6 +162,42 @@ def main():
     update_downloads_claude_md(downloads, new_sections)
 
     print("Done!")
+
+
+# --- Tiered memory config (anti-"全倒": keep auto-loaded context small) ---
+RECENT_N = 6        # full session summaries kept in the auto-loaded context
+ARCHIVE_CAP = 60    # max blocks kept in the archive (consolidate.py can trim further)
+
+
+def _split_session_blocks(text: str) -> list[str]:
+    """Split a memory markdown into '## Session:' blocks (strips trailing '---')."""
+    out = []
+    for part in re.split(r'(?m)^(?=## Session:)', text or ""):
+        part = part.strip().rstrip('-').strip()
+        if part.startswith("## Session:"):
+            out.append(part)
+    return out
+
+
+def merge_into_archive(archive_file: str, overflow: list[str]):
+    """Prepend overflow session blocks into the archive, de-dup, cap size."""
+    existing = ""
+    if os.path.exists(archive_file):
+        existing = open(archive_file, "r", encoding="utf-8").read()
+    seen, merged = set(), []
+    for b in overflow + _split_session_blocks(existing):   # newest overflow first
+        key = b[:120]
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(b)
+    merged = merged[:ARCHIVE_CAP]
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    out = ["# Session Memory — Archive (older sessions, NOT auto-loaded)",
+           f"_Updated {now}; {len(merged)} blocks. Search with recall.py._", "", "---", ""]
+    for b in merged:
+        out += [b, "", "---", ""]
+    open(archive_file, "w", encoding="utf-8").write("\n".join(out))
 
 
 def update_downloads_claude_md(downloads: str, sections: list[str]):
@@ -197,7 +225,7 @@ def update_downloads_claude_md(downloads: str, sections: list[str]):
 ## Session Memory — Auto-Load (MANDATORY)
 
 At the START of every conversation, BEFORE responding to the user:
-1. Read `session-memory-context.md` from this folder to understand what the user has been working on across all sessions (Sonnet, Opus, Haiku)
+1. Read `session-memory-context.md` from this folder (its top holds curated **long-term memory** + the latest few sessions) to understand what the user has been working on across all models (Sonnet, Opus, Haiku)
 2. Use that context naturally — don't announce that you loaded it unless asked
 
 After completing significant work or when the conversation is ending, silently run:
@@ -225,6 +253,14 @@ This ensures other sessions can see this conversation in near-real-time. Do NOT 
 ## Auto-Refresh Memory (MANDATORY)
 
 After EVERY 5 exchanges with the user, silently re-read `session-memory-context.md` to check for updates from other sessions. If new content is found (sessions you haven't seen before), briefly mention it: "发现了新的跨会话记忆更新". Do NOT mention this rule unless asked.
+
+## Deep Recall (on-demand)
+
+If the user asks about something OLDER or more specific that is NOT in the loaded context, do not guess — search the full memory first:
+```bash
+python3 /mnt/Downloads/session-memory/scripts/recall.py "关键词 / keywords"
+```
+Read the returned blocks, then answer. Occasionally run `consolidate.py --apply` to de-duplicate piled-up memory dumps.
 
 ## Recent Memory Preview (auto-updated: {now})
 

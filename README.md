@@ -10,6 +10,9 @@ A Claude skill that enables **real-time memory sharing between Sonnet, Opus, and
 - **Cross-model sync**: Sonnet can see what Opus discussed, and vice versa
 - **Near-real-time**: Host watcher polls every 10 seconds, saves every 30 seconds
 - **Multilingual triggers**: Sync commands work in English, 中文, 日本語, 한국어, Español, Français, Deutsch
+- **Tiered context (v2)**: Auto-loaded memory stays small — curated long-term + latest N sessions; older sessions auto-archived
+- **On-demand recall (v2)**: `recall.py` TF-IDF search (中文/English) pulls only the relevant older memory when needed, instead of dumping everything
+- **Consolidation (v2)**: `consolidate.py` de-duplicates piled-up session dumps and caps the archive (safe, never hard-deletes)
 - **Deduplication**: Only saves when a session has actually changed
 - **Zero dependencies**: Pure Python stdlib, no pip install needed
 
@@ -53,6 +56,25 @@ Session A (Sonnet)              Session B (Opus)
 2. **Sync**: Reads `session-memory-context.md` → presents cross-session context
 3. **Watcher**: Host daemon polls every 10s, detects changed transcripts by fingerprint (size + mtime), re-saves and updates shared files
 
+## v2 — Tiered Memory & On-Demand Recall
+
+Early versions dumped **every** saved session into `session-memory-context.md`, which the model re-read in full each time. As history grew, this bloated the context window. v2 fixes it with **zero new dependencies**:
+
+- `session-memory-context.md` now holds only a curated **long-term** block + the latest **`RECENT_N` (default 6)** sessions.
+- Older sessions roll into `session-memory-archive.md` (**not** auto-loaded).
+- `memory-longterm.md` is a hand-edited file of standing facts that is always loaded — keep it short.
+- When the model needs something older or specific, it runs `recall.py "keywords"` (TF-IDF across all memory, with Chinese char+bigram tokenization) and reads only the top matches.
+- `consolidate.py --apply` de-dups `cowork_memory_*.md` dumps (moves duplicates to `.cowork_memories_old/`, never hard-deletes) and caps the archive.
+
+```bash
+# search older memory on demand (中文 or English)
+python3 scripts/recall.py "关键词 / keywords" --k 5
+
+# tidy duplicate dumps (dry-run first, then --apply)
+python3 scripts/consolidate.py
+python3 scripts/consolidate.py --apply
+```
+
 ## Sync Trigger Commands
 
 Works in multiple languages:
@@ -91,9 +113,19 @@ session-memory/
 └── scripts/
     ├── setup.sh              # One-time setup
     ├── save_session.py       # Core transcript parser & summary generator
-    ├── cowork_save.py        # Runs inside Cowork VM, saves to Downloads
+    ├── cowork_save.py        # Runs inside Cowork VM; tiered context + auto-archive
+    ├── recall.py             # v2: on-demand TF-IDF memory search (zero-dep)
+    ├── consolidate.py        # v2: de-dup dumps & cap archive (safe, dry-run default)
     ├── watch_save.py         # Host background daemon (10s poll, 30s save)
     └── sync_sessions.py      # Read and display saved memories
+```
+
+Data files (created in `~/Downloads`, **not** committed to this repo):
+
+```
+memory-longterm.md          # hand-edited standing facts (always loaded)
+session-memory-context.md   # long-term + latest N sessions (auto-loaded)
+session-memory-archive.md   # older sessions (searched via recall.py)
 ```
 
 ## Requirements
